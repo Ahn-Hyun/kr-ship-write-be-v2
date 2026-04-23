@@ -1,0 +1,155 @@
+name: Auto Blog Generation
+
+on:
+  workflow_dispatch:
+    inputs:
+      pipeline:
+        description: "Pipeline mode"
+        type: choice
+        options:
+          - daily-impact
+          - weekly-major-events
+        default: daily-impact
+  schedule:
+    - cron: "5 12 * * *"
+    - cron: "5 13 * * *"
+    - cron: "35 13 * * 1"
+    - cron: "35 14 * * 1"
+
+concurrency:
+  group: ai-blog-auto
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout AI repo
+        uses: actions/checkout@v4
+
+      - name: Checkout Astro repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.ASTRO_REPOSITORY }}
+          token: ${{ secrets.ASTRO_REPO_TOKEN }}
+          path: ai_blog_v1_astro
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+
+      - name: Install Astro dependencies
+        run: npm ci
+        working-directory: ai_blog_v1_astro
+
+      - name: Resolve pipeline
+        id: pipeline
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "pipeline=${{ github.event.inputs.pipeline }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${{ github.event.schedule }}" = "35 13 * * 1" ] || [ "${{ github.event.schedule }}" = "35 14 * * 1" ]; then
+            echo "pipeline=weekly-major-events" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "pipeline=daily-impact" >> "$GITHUB_OUTPUT"
+
+      - name: Generate posts
+        env:
+          ASTRO_ROOT: ${{ vars.ASTRO_ROOT || format('{0}/ai_blog_v1_astro', github.workspace) }}
+          STATE_PATH: ${{ vars.STATE_PATH || format('{0}/ai_blog_v1_astro/.ai_state/published.json', github.workspace) }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          POST_INTERVAL_HOURS: ${{ vars.POST_INTERVAL_HOURS }}
+          TREND_REGIONS: ${{ vars.TREND_REGIONS || 'KR' }}
+          GEMINI_GROUNDED_DAILY_DISCOVERY: ${{ vars.GEMINI_GROUNDED_DAILY_DISCOVERY || 'true' }}
+          WEEKLY_MAJOR_EVENTS_RUN_WEEKDAY: ${{ vars.WEEKLY_MAJOR_EVENTS_RUN_WEEKDAY || '0' }}
+          WEEKLY_MAJOR_EVENTS_RUN_HOUR: ${{ vars.WEEKLY_MAJOR_EVENTS_RUN_HOUR || '9' }}
+          WEEKLY_MAJOR_EVENTS_PER_LANE: ${{ vars.WEEKLY_MAJOR_EVENTS_PER_LANE || '1' }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.1-pro-preview' }}
+          GEMINI_MODEL_CONTENT: ${{ vars.GEMINI_MODEL_CONTENT || 'gemini-3.1-pro-preview' }}
+          GEMINI_MODEL_META: ${{ vars.GEMINI_MODEL_META || 'gemini-3.1-pro-preview' }}
+          GEMINI_TEMPERATURE: ${{ vars.GEMINI_TEMPERATURE }}
+          GEMINI_MAX_TOKENS: ${{ vars.GEMINI_MAX_TOKENS }}
+          GEMINI_TIMEOUT_SEC: ${{ vars.GEMINI_TIMEOUT_SEC }}
+          OPENAI_WEEKLY_MODEL: ${{ vars.OPENAI_WEEKLY_MODEL || 'gpt-5.4-2026-03-05' }}
+          GOOGLE_IMAGE_MODEL: ${{ vars.GOOGLE_IMAGE_MODEL || 'gemini-3.1-flash-image-preview' }}
+          SEARCH_WEB_ENABLED: ${{ vars.SEARCH_WEB_ENABLED }}
+          SEARCH_WEB_MAX_RESULTS: ${{ vars.SEARCH_WEB_MAX_RESULTS }}
+          SEARCH_WEB_MAX_PER_QUERY: ${{ vars.SEARCH_WEB_MAX_PER_QUERY }}
+          SEARCH_WEB_DEPTH: ${{ vars.SEARCH_WEB_DEPTH }}
+          SEARCH_WEB_INCLUDE_ANSWER: ${{ vars.SEARCH_WEB_INCLUDE_ANSWER }}
+          SEARCH_WEB_INCLUDE_DOMAINS: ${{ vars.SEARCH_WEB_INCLUDE_DOMAINS }}
+          SEARCH_WEB_EXCLUDE_DOMAINS: ${{ vars.SEARCH_WEB_EXCLUDE_DOMAINS }}
+          YOUTUBE_SEARCH_ENABLED: ${{ vars.YOUTUBE_SEARCH_ENABLED }}
+          YOUTUBE_MAX_RESULTS: ${{ vars.YOUTUBE_MAX_RESULTS }}
+          YOUTUBE_MAX_PER_QUERY: ${{ vars.YOUTUBE_MAX_PER_QUERY }}
+          GOOGLE_IMAGE_ENABLED: ${{ vars.GOOGLE_IMAGE_ENABLED }}
+          GOOGLE_IMAGE_ASPECT_RATIO: ${{ vars.GOOGLE_IMAGE_ASPECT_RATIO }}
+          CONTENT_LANGUAGE: ${{ vars.CONTENT_LANGUAGE || 'Korean' }}
+          CONTENT_TONE: ${{ vars.CONTENT_TONE || 'analytical, practical, Korean-stock and Korean-real-estate focused' }}
+          TARGET_COUNTRY_ADJECTIVE: ${{ vars.TARGET_COUNTRY_ADJECTIVE || 'Korean' }}
+          TARGET_COUNTRY_NAME: ${{ vars.TARGET_COUNTRY_NAME || 'South Korea' }}
+          TARGET_MARKET_REGION: ${{ vars.TARGET_MARKET_REGION || 'KR' }}
+          USE_MULTI_AGENT: ${{ vars.USE_MULTI_AGENT }}
+          DAILY_IMPACT_RUN_HOUR: ${{ vars.DAILY_IMPACT_RUN_HOUR || '8,9' }}
+          QUALITY_GATE_REVISIONS: ${{ vars.QUALITY_GATE_REVISIONS }}
+          SEARCH_RSS_ENABLED: ${{ vars.SEARCH_RSS_ENABLED }}
+          SEARCH_RSS_MAX_RESULTS: ${{ vars.SEARCH_RSS_MAX_RESULTS }}
+          SEARCH_RSS_MAX_PER_QUERY: ${{ vars.SEARCH_RSS_MAX_PER_QUERY }}
+          MAX_EVIDENCE_SOURCES: ${{ vars.MAX_EVIDENCE_SOURCES }}
+          BLOG_DOMAIN: ${{ vars.BLOG_DOMAIN || 'kr-ai-blog.localhost' }}
+          POST_DRAFT: ${{ vars.POST_DRAFT }}
+          FALLBACK_CATEGORY: ${{ vars.FALLBACK_CATEGORY || 'stocks' }}
+          FALLBACK_TAGS: ${{ vars.FALLBACK_TAGS }}
+          SCRAPE_DELAY_SEC: ${{ vars.SCRAPE_DELAY_SEC }}
+          SCRAPE_MAX_RETRIES: ${{ vars.SCRAPE_MAX_RETRIES }}
+          SCRAPE_BACKOFF_SEC: ${{ vars.SCRAPE_BACKOFF_SEC }}
+          FINAL_REVIEW_ENABLED: ${{ vars.FINAL_REVIEW_ENABLED }}
+          FINAL_REVIEW_REVISIONS: ${{ vars.FINAL_REVIEW_REVISIONS }}
+          CONTENT_TIMEZONE: ${{ vars.CONTENT_TIMEZONE || 'Asia/Seoul' }}
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            export ENFORCE_LOCAL_RUN_HOUR=1
+          else
+            export ENFORCE_LOCAL_RUN_HOUR=0
+          fi
+          python scripts/auto_blog.py --once --pipeline "${{ steps.pipeline.outputs.pipeline }}"
+          NEW_MDX=$(find ai_blog_v1_astro/src/content/blog -name "*.mdx" -newer ai_blog_v1_astro/.ai_state/published.json 2>/dev/null | wc -l || echo 0)
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "${NEW_MDX}" -eq 0 ]; then
+            echo "WARNING: Pipeline ran but generated 0 new MDX files. Check logs for errors."
+          fi
+
+      - name: Validate Astro build
+        run: |
+          cd ai_blog_v1_astro
+          npm run quality:gate
+          npm run build
+
+      - name: Commit and push to Astro repo
+        run: |
+          cd ai_blog_v1_astro
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Auto: publish blog updates"
+          git pull --rebase origin main
+          git push
