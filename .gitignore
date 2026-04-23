@@ -1,0 +1,6 @@
+.env
+data/state/
+data/trends/
+__pycache__/
+*.py[cod]
+path/to/venv/

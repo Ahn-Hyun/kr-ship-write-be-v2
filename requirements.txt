@@ -1,0 +1,2 @@
+trendspyg
+openai
