@@ -11,10 +11,10 @@ on:
           - weekly-major-events
         default: daily-impact
   schedule:
-    - cron: "5 12 * * *"
-    - cron: "5 13 * * *"
-    - cron: "35 13 * * 1"
-    - cron: "35 14 * * 1"
+    - cron: "5 23 * * *"
+    - cron: "5 0 * * *"
+    - cron: "35 0 * * 1"
+    - cron: "35 1 * * 1"
 
 concurrency:
   group: ai-blog-auto
@@ -59,7 +59,7 @@ jobs:
             echo "pipeline=${{ github.event.inputs.pipeline }}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [ "${{ github.event.schedule }}" = "35 13 * * 1" ] || [ "${{ github.event.schedule }}" = "35 14 * * 1" ]; then
+          if [ "${{ github.event.schedule }}" = "35 0 * * 1" ] || [ "${{ github.event.schedule }}" = "35 1 * * 1" ]; then
             echo "pipeline=weekly-major-events" >> "$GITHUB_OUTPUT"
             exit 0
           fi
