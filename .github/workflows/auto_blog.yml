@@ -112,7 +112,8 @@ jobs:
           SEARCH_RSS_MAX_RESULTS: ${{ vars.SEARCH_RSS_MAX_RESULTS }}
           SEARCH_RSS_MAX_PER_QUERY: ${{ vars.SEARCH_RSS_MAX_PER_QUERY }}
           MAX_EVIDENCE_SOURCES: ${{ vars.MAX_EVIDENCE_SOURCES }}
-          BLOG_DOMAIN: ${{ vars.BLOG_DOMAIN || 'kr-ai-blog.localhost' }}
+          BLOG_DOMAIN: ${{ vars.BLOG_DOMAIN || 'kr.ship-write.com' }}
+          AUTHOR: ${{ vars.AUTHOR || 'Shipwrite.kr Editorial Team' }}
           POST_DRAFT: ${{ vars.POST_DRAFT }}
           FALLBACK_CATEGORY: ${{ vars.FALLBACK_CATEGORY || 'stocks' }}
           FALLBACK_TAGS: ${{ vars.FALLBACK_TAGS }}
