@@ -74,7 +74,8 @@ DEFAULT_ANTHROPIC_MODEL_META = DEFAULT_ANTHROPIC_MODEL
 DEFAULT_ANTHROPIC_TEMPERATURE = 0.6
 DEFAULT_ANTHROPIC_MAX_TOKENS = 60000
 DEFAULT_ANTHROPIC_TIMEOUT_SEC = 900
-DEFAULT_BLOG_DOMAIN = "ship-write.com"
+DEFAULT_BLOG_DOMAIN = "kr.ship-write.com"
+DEFAULT_AUTHOR = "Shipwrite.kr Editorial Team"
 DEFAULT_CONTENT_LANGUAGE = DEFAULT_TARGET_COUNTRY_ADJECTIVE
 DEFAULT_CONTENT_TONE = f"neutral, informative, {DEFAULT_TARGET_MARKET_REGION}-market-focused"
 DEFAULT_USE_MULTI_AGENT = True
@@ -310,6 +311,7 @@ class AutomationConfig:
     anthropic_max_tokens: int
     anthropic_timeout_sec: int
     blog_domain: str
+    author: str
     content_language: str
     content_tone: str
     content_timezone: ZoneInfo
@@ -486,6 +488,7 @@ def _build_config() -> AutomationConfig:
     blog_domain = env.get("BLOG_DOMAIN", DEFAULT_BLOG_DOMAIN)
     if not blog_domain.startswith("http"):
         blog_domain = f"https://{blog_domain}"
+    author = env.get("AUTHOR", DEFAULT_AUTHOR).strip() or DEFAULT_AUTHOR
     content_language = env.get("CONTENT_LANGUAGE", DEFAULT_CONTENT_LANGUAGE).strip() or DEFAULT_CONTENT_LANGUAGE
     content_tone = env.get("CONTENT_TONE", DEFAULT_CONTENT_TONE).strip() or DEFAULT_CONTENT_TONE
     content_timezone = _resolve_timezone(env)
@@ -648,6 +651,7 @@ def _build_config() -> AutomationConfig:
         anthropic_max_tokens=anthropic_max_tokens,
         anthropic_timeout_sec=anthropic_timeout_sec,
         blog_domain=blog_domain.rstrip("/"),
+        author=author,
         content_language=content_language,
         content_tone=content_tone,
         content_timezone=content_timezone,
@@ -716,7 +720,7 @@ def _is_ascii(text: str) -> bool:
 
 
 def _force_ascii(text: str) -> str:
-    return text.encode("ascii", "ignore").decode("ascii")
+    return text
 
 
 def _ensure_ascii_text(text: str | None, fallback: str) -> str:
@@ -2435,7 +2439,7 @@ def _build_content_prompt(
 
     return f"""
 Role: {config.target_country_adjective} markets columnist and investigative writer.
-Write in {language} only. ASCII characters only.
+Write in {language} only.
 
 Primary keyword: {keyword}
 Region: {region}
@@ -2859,6 +2863,7 @@ def _build_outline_prompt(
     keyword: str,
     angle: str,
     evidence_summary: str,
+    language: str,
     template_mode: str | None = None,
 ) -> str:
     system = """
@@ -2894,6 +2899,7 @@ Rules:
 - Include the primary keyword (or close variation) in at least 2 headings.
 - Include sections covering background/context, evidence or data, and outlook.
 - FAQ should target high-intent reader questions, not trivia.
+- Write in {language} only.
 {template_block}
 """.strip()
     return _compose_prompt(system, user)
@@ -3032,6 +3038,7 @@ def _build_assembler_prompt(
     faq_list: list[str],
     tone: str,
     keyword: str,
+    language: str,
     template_mode: str | None = None,
 ) -> str:
     system = """
@@ -3062,6 +3069,7 @@ Requirements:
 - FAQ answers must be concise and evidence-based
 - Preserve inline Markdown citation links [Source Name](URL) from sections — do not strip them
 - Target 5000-6000 words total
+- Write in {language} only.
 - Add a disclaimer paragraph at the very end of the article body (before the FAQ), using this exact text: "**Disclaimer:** This analysis is for informational purposes only and does not constitute investment, financial, real estate, or legal advice. Always consult a licensed financial advisor before making investment decisions."
 {template_block}
 
@@ -3159,7 +3167,7 @@ Rules:
     return _compose_prompt(system, user)
 
 
-def _build_mdx_render_guard_prompt(*, full_mdx: str, hints: list[str]) -> str:
+def _build_mdx_render_guard_prompt(*, full_mdx: str, hints: list[str], language: str) -> str:
     system = """
 You are an MDX rendering QA editor.
 Fix MDX/JSX syntax issues that could break rendering.
@@ -3178,6 +3186,7 @@ Review focus:
 - Fix malformed tags or stray angle brackets in plain text (e.g., "< 5%" → "\< 5%").
 - Bare curly braces in prose MUST be escaped: {{ → \{{ and }} → \}} (e.g., "{{n+1}}" → "\{{n+1\}}", "{{$1B}}" → "\{{$1B\}}"). Do NOT escape braces inside code fences or JSX components.
 - Preserve tables, headings, and source attributions as plain text names only.
+- Write in {language} only.
 
 Decision:
 - status=pass if clean
@@ -3329,7 +3338,7 @@ def _validate_and_repair_posts(
     return False
 
 
-def _build_revision_prompt(*, full_mdx: str, issues_json: str, keyword: str) -> str:
+def _build_revision_prompt(*, full_mdx: str, issues_json: str, keyword: str, language: str) -> str:
     system = """
 You are a senior editor revising an article to address quality issues.
 You must fix the issues without adding new facts or sources.
@@ -3347,6 +3356,7 @@ Rules:
 - Keep the primary keyword "{keyword}" in the first paragraph and conclusion.
 - Keep paragraphs short and avoid redundancy.
 - Mention source names as plain text only; do not include hyperlinks, URLs, or Markdown link syntax in the body.
+- Write in {language} only.
 
 Output (MDX):
 revised article body
@@ -4320,6 +4330,7 @@ def _build_frontmatter(
     draft: bool,
     hero_alt: str,
     domain: str,
+    author: str,
 ) -> str:
     safe_title = title.replace('"', '\\"')
     safe_desc = description.replace('"', '\\"')
@@ -4339,7 +4350,7 @@ def _build_frontmatter(
         f'description: "{safe_desc}"\n'
         f"pubDate: {pub_datetime_str}\n"
         f"updatedDate: {date_str}\n"
-        f'author: "Shipwrite Editorial Team"\n'
+        f'author: "{author}"\n'
         f"category: [{category_list}]\n"
         f"tags: [{tag_list}]\n"
         f"{references_yaml}\n"
@@ -4398,6 +4409,7 @@ def _write_post(
         draft=True if force_draft else config.post_draft,
         hero_alt=hero_alt or title,
         domain=config.blog_domain,
+        author=config.author,
     )
 
     raw_descriptors = inline_image_prompts or []
@@ -4974,6 +4986,7 @@ def _build_outline(
         keyword=keyword,
         angle=angle,
         evidence_summary=evidence_summary,
+        language=config.content_language,
         template_mode=template_mode,
     )
     try:
@@ -5245,6 +5258,7 @@ def _assemble_article(
         faq_list=faq_list,
         tone=config.content_tone,
         keyword=keyword,
+        language=config.content_language,
         template_mode=template_mode,
     )
     try:
@@ -5292,6 +5306,7 @@ def _apply_quality_gate(
             full_mdx=content,
             issues_json=issues_json,
             keyword=keyword,
+            language=config.content_language,
         )
         try:
             revised = writer.generate(
@@ -5373,7 +5388,7 @@ def _apply_mdx_render_guard(
         return content
     attempts = max(config.mdx_render_guard_revisions, 0) + 1
     for attempt in range(attempts):
-        prompt = _build_mdx_render_guard_prompt(full_mdx=content, hints=hints)
+        prompt = _build_mdx_render_guard_prompt(full_mdx=content, hints=hints, language=config.content_language)
         try:
             response = writer.generate(
                 prompt,
