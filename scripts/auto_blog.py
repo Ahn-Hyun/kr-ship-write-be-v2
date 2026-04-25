@@ -3213,7 +3213,9 @@ def _build_mdx_repair_prompt(*, mdx_content: str, errors: list[str]) -> str:
     errors_text = "\n".join(f"- {e}" for e in errors)
     system = """
 You are an MDX content repair specialist for an Astro static blog.
-Fix only what the error messages specify. Do not change any article content, analysis, inline citation links, or the disclaimer.
+Fix only what the error messages specify. Preserve every frontmatter key and value type unless the reported error explicitly requires a change.
+Keep category frontmatter in array syntax such as category: ["stocks"] or category: ["real-estate"]. Do not rewrite valid category values into a different meaning.
+Do not change any article content, analysis, inline citation links, or the disclaimer.
 Output the complete corrected MDX file including frontmatter. Do not truncate or summarize.
 """.strip()
     user = f"""
@@ -3229,6 +3231,28 @@ Output the complete corrected MDX file (raw content starting with ---).
 No code fences, no explanations — just the fixed file content.
 """.strip()
     return _compose_prompt(system, user)
+
+
+def _normalize_repaired_mdx_frontmatter(mdx_content: str) -> str:
+    if not mdx_content.startswith("---\n"):
+        return mdx_content
+
+    match = re.match(r"^---\n(?P<frontmatter>[\s\S]*?)\n---(?P<rest>[\s\S]*)$", mdx_content)
+    if not match:
+        return mdx_content
+
+    normalized_lines: list[str] = []
+    for line in match.group("frontmatter").splitlines():
+        category_match = re.match(
+            r'^category\s*:\s*["\']?(stocks|real-estate)["\']?\s*$',
+            line.strip(),
+        )
+        if category_match:
+            normalized_lines.append(f'category: ["{category_match.group(1)}"]')
+        else:
+            normalized_lines.append(line)
+
+    return "---\n" + "\n".join(normalized_lines) + "\n---" + match.group("rest")
 
 
 def _validate_and_repair_posts(
@@ -3328,6 +3352,7 @@ def _validate_and_repair_posts(
                 )
                 repaired = repaired.strip()
                 if repaired:
+                    repaired = _normalize_repaired_mdx_frontmatter(repaired)
                     target_path.write_text(repaired + "\n", encoding="utf-8")
                     logging.info(
                         "Repaired post: %s (round %d)", filename, round_num + 1
