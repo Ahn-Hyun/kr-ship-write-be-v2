@@ -3243,6 +3243,16 @@ def _normalize_repaired_mdx_frontmatter(mdx_content: str) -> str:
 
     normalized_lines: list[str] = []
     for line in match.group("frontmatter").splitlines():
+        hero_image_match = re.match(
+            r'^heroImage\s*:\s*(?:(?P<quote>["\'])(?P<quoted>.*?)\1|(?P<bare>\S.*?))\s*$',
+            line.strip(),
+        )
+        if hero_image_match:
+            hero_image_value = hero_image_match.group("quoted") or hero_image_match.group("bare") or ""
+            normalized_lines.append("heroImage:")
+            normalized_lines.append(f"  src: {json.dumps(hero_image_value)}")
+            continue
+
         category_match = re.match(
             r'^category\s*:\s*["\']?(stocks|real-estate)["\']?\s*$',
             line.strip(),
